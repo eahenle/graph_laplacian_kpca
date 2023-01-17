@@ -548,12 +548,18 @@ md"""
 This doesn't seem to work as well as was suggested... but that's the idea!
 """
 
+# ╔═╡ 991a2b97-aacc-4da3-b2b0-371a48f18b7b
+md"""
+Maybe by "blurring" the labels we can get something better?
+"""
+
 # ╔═╡ 34edfe6b-fa81-4286-be31-f592fa6309cb
-function blur(G, labels; depth=0, maxdepth=100)
+function blur(G, labels; depth=0, maxdepth=5)
 	H = SimpleGraph(G)
 	new_labels = zeros(Int, length(labels))
 	for v in vertices(H)
-		new_labels[v] = sign(sum(labels[w] for w in neighbors(H, v)))
+		s = sign(sum(labels[w] for w in neighbors(H, v)) + labels[v])
+		new_labels[v] = s ≠ 0 ? s : labels[v]
 	end
 	if labels == new_labels || depth ≥ maxdepth
 		return H, new_labels
@@ -567,6 +573,11 @@ begin
 	H2, labels2 = blur(H, sign.(psi2))
 	graphplot(H2; node_color=labels2)
 end
+
+# ╔═╡ fbf74a0e-3036-4330-9c44-e59297c6ebc0
+md"""
+Nice.  I think technically this is clustering using a graph Laplacian message-passing network (not a *neural* net, b/c no activation function).
+"""
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -2086,7 +2097,9 @@ version = "3.5.0+0"
 # ╟─e91440c2-f2c7-4067-aa9c-a369b18cb229
 # ╟─6141cb44-e94e-488f-9133-0f09e13a0a67
 # ╟─d8d82a31-d7cb-4465-84ca-54237fedc4aa
+# ╟─991a2b97-aacc-4da3-b2b0-371a48f18b7b
 # ╠═34edfe6b-fa81-4286-be31-f592fa6309cb
 # ╠═56b4219f-5d22-40a2-a273-ee096fcc4079
+# ╠═fbf74a0e-3036-4330-9c44-e59297c6ebc0
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
