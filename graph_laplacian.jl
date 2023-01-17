@@ -549,9 +549,24 @@ This doesn't seem to work as well as was suggested... but that's the idea!
 """
 
 # ╔═╡ 34edfe6b-fa81-4286-be31-f592fa6309cb
-md"""
-# 
-"""
+function blur(G, labels; depth=0, maxdepth=100)
+	H = SimpleGraph(G)
+	new_labels = zeros(Int, length(labels))
+	for v in vertices(H)
+		new_labels[v] = sign(sum(labels[w] for w in neighbors(H, v)))
+	end
+	if labels == new_labels || depth ≥ maxdepth
+		return H, new_labels
+	else
+		return blur(H, new_labels; depth=depth+1)
+	end
+end
+
+# ╔═╡ 56b4219f-5d22-40a2-a273-ee096fcc4079
+begin
+	H2, labels2 = blur(H, sign.(psi2))
+	graphplot(H2; node_color=labels2)
+end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -2072,5 +2087,6 @@ version = "3.5.0+0"
 # ╟─6141cb44-e94e-488f-9133-0f09e13a0a67
 # ╟─d8d82a31-d7cb-4465-84ca-54237fedc4aa
 # ╠═34edfe6b-fa81-4286-be31-f592fa6309cb
+# ╠═56b4219f-5d22-40a2-a273-ee096fcc4079
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
