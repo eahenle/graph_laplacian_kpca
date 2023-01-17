@@ -4,12 +4,22 @@
 using Markdown
 using InteractiveUtils
 
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+end
+
 # ╔═╡ 499fa1fa-95d9-11ed-30ff-2b7a001a43ae
 begin
 	using CairoMakie, GraphMakie, PlutoTest, PlutoUI, ShortCodes
 	using Graphs, SparseArrays, Arpack, LinearAlgebra
 	import ForwardDiff.gradient
-	TableOfContents(title="Laplacian kPCA")
+	TableOfContents(title="")
 end
 
 # ╔═╡ d22f6168-cd5a-4e78-bb78-9d85281528b0
@@ -407,7 +417,7 @@ md"""
 
 # ╔═╡ b563f867-15b2-44e7-b69b-d015cfe9e5d6
 md"""
-## Eigendecomposition Properties
+## Clustering
 """
 
 # ╔═╡ 796b5768-8876-44ab-a52c-79b280de28c5
@@ -428,6 +438,11 @@ begin
 	)
 	fig
 end
+
+# ╔═╡ 7b15c2e0-eb73-4fe0-b692-688e1a56c17f
+md"""
+### Eigendecomposition
+"""
 
 # ╔═╡ 962db6c6-9453-4b9a-b3f0-301a01cec327
 md"""
@@ -470,6 +485,11 @@ The Fiedler vector ``\psi_2`` (Strang calls this ``x_2``) is the column of ``\ps
 # ╔═╡ 0c231f7f-d7c7-4e1f-bb1f-e15989d4d702
 ψ₂ = ψ[:, argmin(λ)]
 
+# ╔═╡ 5c23dcd9-9486-4b35-bfcd-6404203d0f27
+md"""
+### Example 1
+"""
+
 # ╔═╡ eebb5288-5c64-4148-82ce-e048c259dd42
 md"""
 Coloring the nodes by their corresponding weights in the Fiedler vector shows a clustering!
@@ -485,6 +505,11 @@ begin
 	)
 	fig
 end
+
+# ╔═╡ 520ff1c1-5d40-42af-a4cc-8b27663383f7
+md"""
+### Example 2
+"""
 
 # ╔═╡ ad71e4ab-c1a1-4e96-be04-6505eb5e76c7
 md"""
@@ -548,35 +573,220 @@ md"""
 This doesn't seem to work as well as was suggested... but that's the idea!
 """
 
+# ╔═╡ 0d3a35d4-2b6f-413b-a106-fbc6f51c9a92
+md"""
+### Example 2.5
+"""
+
 # ╔═╡ 991a2b97-aacc-4da3-b2b0-371a48f18b7b
 md"""
 Maybe by "blurring" the labels we can get something better?
 """
 
+# ╔═╡ abbb075c-25df-4ce2-a331-3a65c82c5b77
+activation_fxn(x) = 2/(1+exp(-20x)) - 1
+
 # ╔═╡ 34edfe6b-fa81-4286-be31-f592fa6309cb
-function blur(G, labels; depth=0, maxdepth=5)
-	H = SimpleGraph(G)
-	new_labels = zeros(Int, length(labels))
-	for v in vertices(H)
-		s = sign(sum(labels[w] for w in neighbors(H, v)) + labels[v])
-		new_labels[v] = s ≠ 0 ? s : labels[v]
+function blur(G, labels; depth=0, maxdepth=100)
+	new_labels = copy(labels)
+	for v in vertices(G)
+		new_labels[v] = 
+			activation_fxn(sum(labels[w] for w in neighbors(G, v)) + labels[v])
+		if isapprox(new_labels[v], 0)
+			new_labels[v] = labels[v]
+		end
 	end
 	if labels == new_labels || depth ≥ maxdepth
-		return H, new_labels
+		return new_labels
 	else
-		return blur(H, new_labels; depth=depth+1)
+		return blur(G, new_labels; depth=depth+1)
 	end
 end
 
 # ╔═╡ 56b4219f-5d22-40a2-a273-ee096fcc4079
 begin
-	H2, labels2 = blur(H, sign.(psi2))
-	graphplot(H2; node_color=labels2)
+	local new_labels = blur(H, sign.(psi2))
+	graphplot(H; node_color=new_labels)
 end
 
 # ╔═╡ fbf74a0e-3036-4330-9c44-e59297c6ebc0
 md"""
-Nice.  I think technically this is clustering using a graph Laplacian message-passing network (not a *neural* net, b/c no activation function).
+Nice.  This is technically a graph Laplacian message passing neural network!  😆
+"""
+
+# ╔═╡ ccc15f91-44f7-414a-bd16-5a068d9509a3
+md"""
+But... is the Laplacian even helping us?
+"""
+
+# ╔═╡ 2c57a095-7be1-40d9-b980-17ca389d63d9
+begin
+	local new_labels = sign.(sum(blur(H, rand([-1., 1.], nv(H))) for _ in 1:1e6))
+	graphplot(H; node_color=new_labels)
+end
+
+# ╔═╡ 92ac9c58-0b18-4097-b455-5e90a41a0e10
+md"""
+Yep!
+"""
+
+# ╔═╡ 5510a572-7026-49ba-b924-9e9d70114354
+md"""
+# Graph Laplacian PCA
+"""
+
+# ╔═╡ 3b1ba68b-de0f-4cd1-9b51-17d1e7fa0ed4
+md"""
+!!! note "Source"
+	__Graph-Laplacian PCA: Closed-form Solution and Robustness__
+	
+	Bo Jiang, Chris Ding, Bin Luo, Jin Tang; CVPR 2013
+"""
+
+# ╔═╡ 0c906855-eb78-43e3-97b3-7915c1a33a1c
+md"""
+## Data
+"""
+
+# ╔═╡ db10dd50-4cdf-48f9-b5fe-9c0923a07977
+md"""
+!!! quote
+	"input data contains vector data ``X`` and graph data ``W``"
+
+Input data matrix ``X`` of ``n`` column vectors ``x_i\in\mathbb{R}^p``
+
+$$X=\begin{bmatrix}x_1&\dots&x_n\end{bmatrix}\in\mathbb{R}^{p\times n}$$
+
+Input data "graph" ``W`` is actually a Gram matrix
+
+$$W=\begin{bmatrix}
+	k_{1,1}&\cdots&k_{1,n}\\
+	\vdots&\ddots&\vdots\\
+	k_{n,1}&\cdots&k_{n,n}
+\end{bmatrix}\in\mathbb{R}^{n\times n}$$
+"""
+
+# ╔═╡ 6d8c1e7a-e340-430e-abfb-c1937f537eeb
+md"""
+## Objective
+"""
+
+# ╔═╡ 88b0485d-e3d7-4e4f-894d-e2bf883acb80
+md"""
+!!! quote
+	"We wish to learn a low dimensional data representation of ``X`` that incorporates data cluster structures inherent in ``W``, i.e., a representation regularized by the data manifold encoded in ``W``."
+
+The solution presented is to combine PCA with Laplacian embedding.
+
+For Laplacian embedding, the objective is
+
+$$\min_Q\sum_{i,j=1}^n||q_i-q_j||^2W_{ij}:Q^TQ=I$$
+
+which is also
+
+$$\min_Q\text{Tr}(Q^TLQ)$$
+
+where ``Q\in\mathbb{R}^{n\times k}`` is the matrix of embedding column vectors ``q_i``.
+
+In PCA, the objective is
+
+$$\min_{U,V}||\bar{X}-UV^T||^2_F:V^TV=I$$
+
+where ``U\in\mathbb{R}^{p\times k}`` is the matrix of principal components, ``V\in\mathbb{R}^{n\times k}`` is the matrix of ``k``-dimensional data embeddings, and ``\bar{X}`` is the matrix ``X`` after row-centering (i.e. subtracting the mean of each row from every element in the row).
+
+Combining the PCA and Laplacian embedding objectives by setting ``V=Q`` and taking a weighted sum gives the gLPCA objective:
+
+$$\min_{U,Q}J=||\bar{X}-UQ^T||^2_F+\alpha\text{Tr}(Q^TLQ):Q^TQ=I$$
+"""
+
+# ╔═╡ cfeb71f3-a9d4-4b50-80d9-911c41f698c7
+md"""
+## Solution
+"""
+
+# ╔═╡ 97d4be32-e2ac-4644-baa6-d8ab0b9f075b
+md"""
+The optimal ``U`` for a given ``Q`` is obtained by solving
+
+$$\frac{\partial{J}}{\partial{U}}=-2\bar{X}Q+2U=0$$
+
+which yields
+
+$$U=\bar{X}Q$$
+
+The optimal ``Q`` is obtained by applying this result to the gLPCA objective function:
+
+$$\min_{Q}||\bar{X}-\bar{X}QQ^T||^2_F+\alpha\text{Tr}(Q^TLQ)=\min_Q\text{Tr}\left(Q^T(\alpha L-\bar{X}^T\bar{X})Q\right)$$
+
+Let 
+
+$$G=\alpha L-\bar{X}^T\bar{X}$$  
+
+Then the objective is 
+
+$$\min_Q\text{Tr}(Q^TGQ)$$
+
+``\therefore`` The optimal ``Q`` is composed of the eigenvectors corresponding to the ``k`` smallest eigenvalues of ``G``
+"""
+
+# ╔═╡ 5cbe18b2-23ff-4ac7-ae89-1209eb2cb678
+md"""
+## Example
+"""
+
+# ╔═╡ eeee05dc-cf41-4cc9-af85-030a2a2b9bb1
+md"""
+Let's try this out on the grid graph example.
+
+The ``X`` matrix will just be the vector of values from the function ``f`` applied to each grid point's coordinates.
+"""
+
+# ╔═╡ 5e4ba570-f890-4b88-8cc6-80f9c47d3be6
+X = fϕ
+
+# ╔═╡ 4c8cdb41-915a-47f9-9aff-bcca06294fff
+md"""
+Apply the centering procedure to ``X``
+"""
+
+# ╔═╡ 7d59270f-af25-4e9d-816f-1ec9fe449f4a
+X̄ = X .- sum(X)/length(X)
+
+# ╔═╡ 87d8d815-9fb2-453a-b675-bf0d057c250b
+md"""
+The graph ``W`` is the grid
+"""
+
+# ╔═╡ 785d4d8c-a8d1-4713-8b83-0d7f877fca64
+W = grid_5x5
+
+# ╔═╡ ef6a86c1-4bb2-4ca1-9a0e-7123a44d53ce
+md"""
+We choose the parameter ``\beta``
+"""
+
+# ╔═╡ fd1fe80e-37d2-4d15-841c-0cd76bc95c2a
+md"""
+β = $(@bind β NumberField(0:0.1:1; default=0.5))
+"""
+
+# ╔═╡ d6ffa999-3317-4f46-9758-d39f0eb212f3
+Q = begin
+	XTX = X̄ * X̄'
+	λXTX, ψXTX = eigs(XTX)
+	wL = laplacian_matrix(W)
+	λL, ψL = eigs(wL)
+	λn = maximum(abs.(λXTX))
+	ξn = maximum(abs.(λL))
+	α = β * λn / ((1 - β) * ξn)
+	λQ, ψQ = eigs(α * wL ./ ξn - XTX ./ λn)
+	Q = ψQ[:, sortperm(abs.(λQ))[1:5]]
+end
+
+# ╔═╡ 267b1c48-c4d9-4187-89ec-7c4414906322
+md"""
+!!! danger "Hmm"
+	This is not checking out...
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
@@ -2077,6 +2287,7 @@ version = "3.5.0+0"
 # ╟─b563f867-15b2-44e7-b69b-d015cfe9e5d6
 # ╟─796b5768-8876-44ab-a52c-79b280de28c5
 # ╟─454027e3-4733-40ec-8ae0-4b18d5386cb3
+# ╟─7b15c2e0-eb73-4fe0-b692-688e1a56c17f
 # ╟─962db6c6-9453-4b9a-b3f0-301a01cec327
 # ╠═f95cee56-df99-4a4f-8e80-515cc1c7df50
 # ╟─a847dd0a-ed33-4a3d-95a3-b2b7cc93af79
@@ -2087,8 +2298,10 @@ version = "3.5.0+0"
 # ╠═ef9ec87b-2b40-41e4-8045-9f7da7ad19b6
 # ╟─26f0c057-5748-4627-ae6e-0712a31fb8df
 # ╠═0c231f7f-d7c7-4e1f-bb1f-e15989d4d702
+# ╟─5c23dcd9-9486-4b35-bfcd-6404203d0f27
 # ╟─eebb5288-5c64-4148-82ce-e048c259dd42
 # ╟─2e9e0659-7544-4445-a6a7-317497fa0574
+# ╟─520ff1c1-5d40-42af-a4cc-8b27663383f7
 # ╟─ad71e4ab-c1a1-4e96-be04-6505eb5e76c7
 # ╠═62b45813-ffd9-440b-bf04-b6e1dceca140
 # ╟─4d11e228-6082-4a19-bbd9-b50c97ec328b
@@ -2097,9 +2310,33 @@ version = "3.5.0+0"
 # ╟─e91440c2-f2c7-4067-aa9c-a369b18cb229
 # ╟─6141cb44-e94e-488f-9133-0f09e13a0a67
 # ╟─d8d82a31-d7cb-4465-84ca-54237fedc4aa
+# ╟─0d3a35d4-2b6f-413b-a106-fbc6f51c9a92
 # ╟─991a2b97-aacc-4da3-b2b0-371a48f18b7b
+# ╠═abbb075c-25df-4ce2-a331-3a65c82c5b77
 # ╠═34edfe6b-fa81-4286-be31-f592fa6309cb
 # ╠═56b4219f-5d22-40a2-a273-ee096fcc4079
-# ╠═fbf74a0e-3036-4330-9c44-e59297c6ebc0
+# ╟─fbf74a0e-3036-4330-9c44-e59297c6ebc0
+# ╟─ccc15f91-44f7-414a-bd16-5a068d9509a3
+# ╠═2c57a095-7be1-40d9-b980-17ca389d63d9
+# ╟─92ac9c58-0b18-4097-b455-5e90a41a0e10
+# ╟─5510a572-7026-49ba-b924-9e9d70114354
+# ╟─3b1ba68b-de0f-4cd1-9b51-17d1e7fa0ed4
+# ╟─0c906855-eb78-43e3-97b3-7915c1a33a1c
+# ╟─db10dd50-4cdf-48f9-b5fe-9c0923a07977
+# ╟─6d8c1e7a-e340-430e-abfb-c1937f537eeb
+# ╟─88b0485d-e3d7-4e4f-894d-e2bf883acb80
+# ╟─cfeb71f3-a9d4-4b50-80d9-911c41f698c7
+# ╟─97d4be32-e2ac-4644-baa6-d8ab0b9f075b
+# ╟─5cbe18b2-23ff-4ac7-ae89-1209eb2cb678
+# ╟─eeee05dc-cf41-4cc9-af85-030a2a2b9bb1
+# ╠═5e4ba570-f890-4b88-8cc6-80f9c47d3be6
+# ╟─4c8cdb41-915a-47f9-9aff-bcca06294fff
+# ╠═7d59270f-af25-4e9d-816f-1ec9fe449f4a
+# ╟─87d8d815-9fb2-453a-b675-bf0d057c250b
+# ╠═785d4d8c-a8d1-4713-8b83-0d7f877fca64
+# ╟─ef6a86c1-4bb2-4ca1-9a0e-7123a44d53ce
+# ╟─fd1fe80e-37d2-4d15-841c-0cd76bc95c2a
+# ╠═d6ffa999-3317-4f46-9758-d39f0eb212f3
+# ╠═267b1c48-c4d9-4187-89ec-7c4414906322
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
