@@ -25,7 +25,7 @@ end
 # ╔═╡ d22f6168-cd5a-4e78-bb78-9d85281528b0
 md"""
 !!! ok "Shout-Out to Gilbert Strang"
-	This video (MIT open courseware) largely shaped this notebook's content and structure.
+	This video (MIT open courseware) heavily influenced this notebook's content and structure.
 """
 
 # ╔═╡ 2915ef04-6b31-44a8-a31a-3a24608939be
@@ -133,7 +133,7 @@ md"""
 
 # ╔═╡ 968ff5dc-9c3e-44aa-afdd-644a24c9acee
 md"""
-The incidence matrix ``B`` of graph ``G`` is a rectangular matrix with number of rows equal to the number of nodes, and number of columns equal to the number of edges, having elements denoting whether a given edge is incoming or outgoing at each node.
+The incidence matrix ``B`` of simple graph ``G`` is a rectangular matrix with number of rows equal to the number of nodes, and number of columns equal to the number of edges, having elements denoting whether a given edge is incoming or outgoing at each node (for a directed graph).  In the case of an undirected graph, the incidence matrix elements may be strictly non-negative, or a sign convention may be applied.
 
 $$B=\begin{bmatrix}
 	b_{11} & \cdots & b_{1m} \\
@@ -142,7 +142,11 @@ $$B=\begin{bmatrix}
 \end{bmatrix}
 : m=|\mathcal{E}(G)| \wedge n=|\mathcal{V}(G)|$$
 
-$$b_{ij}=\begin{cases}1,&e_{ij}\in\mathcal{E}(G)\\-1,&e_{ji}\in\mathcal{E}(G)\\0\end{cases}$$
+$$b_{ij}=\begin{cases}
+	1, & i=\max\mathcal{V}(e_{j}) \\
+	-1, & i=\min\mathcal{V}(e_{j}) \\
+	0
+\end{cases}$$
 """
 
 # ╔═╡ 88302a0f-52cd-4af7-8cba-3faa95a168fe
@@ -523,11 +527,11 @@ H = begin
 		[
 			join(SimpleGraph(2), cycle_graph(6)), 
 			join(star_graph(5), path_graph(2)),
-			join(star_graph(5), path_graph(2))
+			# join(star_graph(5), path_graph(2))
 		]
 	)
 	add_edge!(H, 8, 9)
-	add_edge!(H, 15, 16)
+	# add_edge!(H, 15, 16)
 	H
 end
 
@@ -550,7 +554,19 @@ Eigendecompose the graph Laplacian:
 begin
 	lambda, psi = eigs(laplacian_matrix(H))
 	psi2 = psi[:, argmin(lambda)]
-end;
+end
+
+# ╔═╡ e1920ab0-d5c6-4d1d-8efa-7318661c451e
+lambda2, Psi2 = eigen(Matrix(laplacian_matrix(H)))
+
+# ╔═╡ 88c68921-2178-42b2-a669-de7631c4c0c9
+Psi2[:, 2]
+
+# ╔═╡ 752825d8-17d9-4782-a02f-1f1087841950
+
+
+# ╔═╡ 030abf0a-6449-4868-b857-fdda35db3e84
+psi
 
 # ╔═╡ e91440c2-f2c7-4067-aa9c-a369b18cb229
 md"""
@@ -563,7 +579,7 @@ begin
 	graphplot!(
 		Axis(fig[1, 1]; graphplot_ax_kwargs...),
 		H; 
-		node_color=sign.(psi2)
+		node_color=sign.(Psi2[:, 2])
 	)
 	fig
 end
@@ -720,13 +736,35 @@ $$\min_{Q}||\bar{X}-\bar{X}QQ^T||^2_F+\alpha\text{Tr}(Q^TLQ)=\min_Q\text{Tr}\lef
 
 Let 
 
-$$G=\alpha L-\bar{X}^T\bar{X}$$  
+$$G_\alpha=\alpha L-\bar{X}^T\bar{X}$$  
 
 Then the objective is 
 
-$$\min_Q\text{Tr}(Q^TGQ)$$
+$$\min_Q\text{Tr}(Q^TG_\alpha Q)$$
 
-``\therefore`` The optimal ``Q`` is composed of the eigenvectors corresponding to the ``k`` smallest eigenvalues of ``G``
+Let's also impose some normalizations.
+
+Normalization term for ``\bar{X}^T\bar{X}``:
+
+$$\lambda_n=\max\lambda:\lambda \bar{X}^T\bar{X}=\Psi \bar{X}^T\bar{X}$$
+
+Normalization term for ``L``:
+
+$$\xi_n=\max\xi:\xi L=\Psi L$$
+
+Alternative trade-off factor:
+
+$$\alpha=\frac{\lambda_n\beta}{\xi_n(1-\beta)}$$
+
+This gives the objective
+
+$$min_Q\text{Tr}\left(Q^T\left[(1-\beta)(I-\frac{\bar{X}^T\bar{X}}{\lambda_n})+\frac{\beta}{\xi_n}L\right]Q\right)$$
+
+Finally, let
+
+$$G_\beta=(1-\beta)(I-\frac{\bar{X}^T\bar{X}}{\lambda_n})+\frac{\beta}{\xi_n}L$$
+
+``\therefore`` The optimal ``Q`` is composed of the eigenvectors corresponding to the ``k`` smallest eigenvalues of ``G_\beta``.
 """
 
 # ╔═╡ 5cbe18b2-23ff-4ac7-ae89-1209eb2cb678
@@ -774,19 +812,37 @@ md"""
 Q = begin
 	XTX = X̄ * X̄'
 	λXTX, ψXTX = eigs(XTX)
+	λn = maximum(abs.(λXTX))
+	
 	wL = laplacian_matrix(W)
 	λL, ψL = eigs(wL)
-	λn = maximum(abs.(λXTX))
 	ξn = maximum(abs.(λL))
-	α = β * λn / ((1 - β) * ξn)
-	λQ, ψQ = eigs(α * wL ./ ξn - XTX ./ λn)
+	
+	Gβ = (1 - β) * (I - XTX / λn) + β * wL / ξn
+	λQ, ψQ = eigs(Gβ)
 	Q = ψQ[:, sortperm(abs.(λQ))[1:5]]
-end
+end;
 
-# ╔═╡ 267b1c48-c4d9-4187-89ec-7c4414906322
+# ╔═╡ 6481feee-1152-4eac-9b65-d9efcf9f46ad
+md"""
+!!! ok "Data Representation Test"
+"""
+
+# ╔═╡ bd66bdd1-b486-4270-971b-5760776feea9
+U = X̄' * Q
+
+# ╔═╡ d67dfa38-388a-4a73-ab07-7edc5d9fbb8f
+E = norm(X̄' - U * Q') / norm(X̄)
+
+# ╔═╡ 085de9b1-00b4-4720-b281-e6f4259dd479
+@test E ≤ 0.25
+
+# ╔═╡ d76bcdf2-735f-47ba-8fa8-0eda52a56289
 md"""
 !!! danger "Hmm"
-	This is not checking out...
+	100 % error for all β...
+
+	Is it the choice of data, or is the code wrong?
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
@@ -835,9 +891,9 @@ uuid = "6e696c72-6542-2067-7265-42206c756150"
 version = "1.1.4"
 
 [[deps.AbstractTrees]]
-git-tree-sha1 = "faa260e4cb5aba097a73fab382dd4b5819d8ec8c"
+git-tree-sha1 = "52b3b436f8f73133d7bc3a6c71ee7ed6ab2ab754"
 uuid = "1520ce14-60c1-5f80-bbc7-55ef81b5835c"
-version = "0.4.4"
+version = "0.4.3"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra"]
@@ -933,6 +989,12 @@ deps = ["Artifacts", "Bzip2_jll", "CompilerSupportLibraries_jll", "Fontconfig_jl
 git-tree-sha1 = "4b859a208b2397a7a623a03449e4636bdb17bcf2"
 uuid = "83423d85-b0ee-5818-9007-b63ccbeb887a"
 version = "1.16.1+1"
+
+[[deps.Calculus]]
+deps = ["LinearAlgebra"]
+git-tree-sha1 = "f641eb0a4f00c343bbc32346e1217b86f3ce9dad"
+uuid = "49dc2e85-a5d0-5ad3-a950-438e2897f1b9"
+version = "0.5.1"
 
 [[deps.ChainRulesCore]]
 deps = ["Compat", "LinearAlgebra", "SparseArrays"]
@@ -1069,6 +1131,12 @@ deps = ["ArgTools", "FileWatching", "LibCURL", "NetworkOptions"]
 uuid = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 version = "1.6.0"
 
+[[deps.DualNumbers]]
+deps = ["Calculus", "NaNMath", "SpecialFunctions"]
+git-tree-sha1 = "5837a837389fccf076445fce071c8ddaea35a566"
+uuid = "fa6b7ba4-c1ee-5f82-b5fc-ecf0adba8f74"
+version = "0.6.8"
+
 [[deps.EarCut_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "e3290f2d49e661fbd94046d7e3726ffcb2d41053"
@@ -1185,9 +1253,9 @@ version = "0.1.2"
 
 [[deps.GeoInterface]]
 deps = ["Extents"]
-git-tree-sha1 = "e315c4f9d43575cf6b4e511259433803c15ebaa2"
+git-tree-sha1 = "fb28b5dc239d0174d7297310ef7b84a11804dfab"
 uuid = "cf35fbd7-0cd7-5166-be24-54bfbe79505f"
-version = "1.1.0"
+version = "1.0.1"
 
 [[deps.GeometryBasics]]
 deps = ["EarCut_jll", "GeoInterface", "IterTools", "LinearAlgebra", "StaticArrays", "StructArrays", "Tables"]
@@ -1244,15 +1312,21 @@ version = "1.0.2"
 
 [[deps.HTTP]]
 deps = ["Base64", "CodecZlib", "Dates", "IniFile", "Logging", "LoggingExtras", "MbedTLS", "NetworkOptions", "OpenSSL", "Random", "SimpleBufferStream", "Sockets", "URIs", "UUIDs"]
-git-tree-sha1 = "eb5aa5e3b500e191763d35198f859e4b40fff4a6"
+git-tree-sha1 = "a1fd86ba1fae7c73fd98c7e60f8adf036c31d441"
 uuid = "cd3eb016-35fb-5094-929b-558a96fad6f3"
-version = "1.7.3"
+version = "1.7.2"
 
 [[deps.HarfBuzz_jll]]
 deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "Graphite2_jll", "JLLWrappers", "Libdl", "Libffi_jll", "Pkg"]
 git-tree-sha1 = "129acf094d168394e80ee1dc4bc06ec835e510a3"
 uuid = "2e76f6c2-a576-52d4-95c1-20adfe4de566"
 version = "2.8.1+1"
+
+[[deps.HypergeometricFunctions]]
+deps = ["DualNumbers", "LinearAlgebra", "OpenLibm_jll", "SpecialFunctions", "Test"]
+git-tree-sha1 = "709d864e3ed6e3545230601f94e11ebc65994641"
+uuid = "34004b35-14d8-5ef3-9330-4cdb6864b03a"
+version = "0.3.11"
 
 [[deps.Hyperscript]]
 deps = ["Test"]
@@ -1996,10 +2070,10 @@ uuid = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 version = "0.33.21"
 
 [[deps.StatsFuns]]
-deps = ["ChainRulesCore", "InverseFunctions", "IrrationalConstants", "LogExpFunctions", "Reexport", "Rmath", "SpecialFunctions"]
-git-tree-sha1 = "5950925ff997ed6fb3e985dcce8eb1ba42a0bbe7"
+deps = ["ChainRulesCore", "HypergeometricFunctions", "InverseFunctions", "IrrationalConstants", "LogExpFunctions", "Reexport", "Rmath", "SpecialFunctions"]
+git-tree-sha1 = "ab6083f09b3e617e34a956b43e9d51b824206932"
 uuid = "4c63d2b9-4356-54db-8cca-17b64c39e42c"
-version = "0.9.18"
+version = "1.1.1"
 
 [[deps.StructArrays]]
 deps = ["Adapt", "DataAPI", "GPUArraysCore", "StaticArraysCore", "Tables"]
@@ -2307,8 +2381,12 @@ version = "3.5.0+0"
 # ╟─4d11e228-6082-4a19-bbd9-b50c97ec328b
 # ╟─1398722a-2ce7-437e-b67e-83779fec0639
 # ╠═ecc9d934-ddb0-4310-a52d-9f919f1c7455
+# ╠═e1920ab0-d5c6-4d1d-8efa-7318661c451e
+# ╠═88c68921-2178-42b2-a669-de7631c4c0c9
+# ╠═752825d8-17d9-4782-a02f-1f1087841950
+# ╠═030abf0a-6449-4868-b857-fdda35db3e84
 # ╟─e91440c2-f2c7-4067-aa9c-a369b18cb229
-# ╟─6141cb44-e94e-488f-9133-0f09e13a0a67
+# ╠═6141cb44-e94e-488f-9133-0f09e13a0a67
 # ╟─d8d82a31-d7cb-4465-84ca-54237fedc4aa
 # ╟─0d3a35d4-2b6f-413b-a106-fbc6f51c9a92
 # ╟─991a2b97-aacc-4da3-b2b0-371a48f18b7b
@@ -2337,6 +2415,10 @@ version = "3.5.0+0"
 # ╟─ef6a86c1-4bb2-4ca1-9a0e-7123a44d53ce
 # ╟─fd1fe80e-37d2-4d15-841c-0cd76bc95c2a
 # ╠═d6ffa999-3317-4f46-9758-d39f0eb212f3
-# ╠═267b1c48-c4d9-4187-89ec-7c4414906322
+# ╟─6481feee-1152-4eac-9b65-d9efcf9f46ad
+# ╠═bd66bdd1-b486-4270-971b-5760776feea9
+# ╠═d67dfa38-388a-4a73-ab07-7edc5d9fbb8f
+# ╠═085de9b1-00b4-4720-b281-e6f4259dd479
+# ╟─d76bcdf2-735f-47ba-8fa8-0eda52a56289
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
