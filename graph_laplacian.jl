@@ -17,7 +17,7 @@ end
 # ╔═╡ 499fa1fa-95d9-11ed-30ff-2b7a001a43ae
 begin
 	using CairoMakie, GraphMakie, PlutoTest, PlutoUI, ShortCodes
-	using Graphs, SparseArrays, Arpack, LinearAlgebra
+	using Graphs, SparseArrays, LinearAlgebra
 	import ForwardDiff.gradient
 	TableOfContents(title="")
 end
@@ -375,13 +375,6 @@ end;
 # ╔═╡ 3fef1ca6-6bf8-437c-88ec-1f482201fbba
 begin
 	local fig = Figure()
-	
-	# graphplot!(
-	# 	Axis(fig[1, 1]; title="Laplacian", graphplot_ax_kwargs...), 
-	# 	grid_5x5; 
-	# 	layout=GraphMakie.SquareGrid(),
-	# 	node_color=Δf2
-	# )
 
 	graphplot!(
 		Axis(fig[1, 2]; title="Graph Laplacian Product", graphplot_ax_kwargs...), 
@@ -396,17 +389,6 @@ begin
 		layout=GraphMakie.SquareGrid(),
 		node_color=dΔfϕ
 	)
-
-	# graphplot!(
-	# 	Axis(
-	# 		fig[1, 2]; 
-	# 		title="Continuous Laplacian Product", 
-	# 		graphplot_ax_kwargs...
-	# 	), 
-	# 	grid_5x5; 
-	# 	layout=GraphMakie.SquareGrid(),
-	# 	node_color=cΔfϕ
-	# )
 	
 	fig
 end
@@ -467,13 +449,8 @@ md"""
 The first eigenvector of ``L`` is in the null space; i.e. it has eigenvalue ``\lambda_1=0`` and is of the form ``\phi_1=c\hat{1}``.  This is not useful.
 """
 
-# ╔═╡ 8d926e11-cbd5-4889-aca9-734eae47334b
-md"""
-Using `Arpack.eigs` instead (it works efficiently on sparse matrices and discards null-space eigenrelations):
-"""
-
 # ╔═╡ 72785005-3956-4737-93e8-cf24de1f5154
-λ, ψ = eigs(L); # default is to seek 6 eigenvectors, but only 3 non-zeros here
+λ, ψ = eigen(Matrix(L));
 
 # ╔═╡ 39cdbeb9-270f-4b53-9920-c1404d17a5b9
 λ # eigenvalues
@@ -483,11 +460,11 @@ Using `Arpack.eigs` instead (it works efficiently on sparse matrices and discard
 
 # ╔═╡ 26f0c057-5748-4627-ae6e-0712a31fb8df
 md"""
-The Fiedler vector ``\psi_2`` (Strang calls this ``x_2``) is the column of ``\psi`` corresponding to the lowest value in ``\lambda``.
+The Fiedler vector ``\psi_2`` (Strang's ``x_2``) is the column of ``\psi`` corresponding to the lowest non-zero value in ``\lambda``.
 """
 
 # ╔═╡ 0c231f7f-d7c7-4e1f-bb1f-e15989d4d702
-ψ₂ = ψ[:, argmin(λ)]
+ψ₂ = ψ[:, sortperm(λ)[2]]
 
 # ╔═╡ 5c23dcd9-9486-4b35-bfcd-6404203d0f27
 md"""
@@ -527,11 +504,11 @@ H = begin
 		[
 			join(SimpleGraph(2), cycle_graph(6)), 
 			join(star_graph(5), path_graph(2)),
-			# join(star_graph(5), path_graph(2))
+			join(star_graph(5), path_graph(2))
 		]
 	)
 	add_edge!(H, 8, 9)
-	# add_edge!(H, 15, 16)
+	add_edge!(H, 15, 16)
 	H
 end
 
@@ -552,21 +529,9 @@ Eigendecompose the graph Laplacian:
 
 # ╔═╡ ecc9d934-ddb0-4310-a52d-9f919f1c7455
 begin
-	lambda, psi = eigs(laplacian_matrix(H))
-	psi2 = psi[:, argmin(lambda)]
+	lambda, psi = eigen(Matrix(laplacian_matrix(H)))
+	psi2 = psi[:, sortperm(lambda)[2]]
 end
-
-# ╔═╡ e1920ab0-d5c6-4d1d-8efa-7318661c451e
-lambda2, Psi2 = eigen(Matrix(laplacian_matrix(H)))
-
-# ╔═╡ 88c68921-2178-42b2-a669-de7631c4c0c9
-Psi2[:, 2]
-
-# ╔═╡ 752825d8-17d9-4782-a02f-1f1087841950
-
-
-# ╔═╡ 030abf0a-6449-4868-b857-fdda35db3e84
-psi
 
 # ╔═╡ e91440c2-f2c7-4067-aa9c-a369b18cb229
 md"""
@@ -579,44 +544,9 @@ begin
 	graphplot!(
 		Axis(fig[1, 1]; graphplot_ax_kwargs...),
 		H; 
-		node_color=sign.(Psi2[:, 2])
+		node_color=sign.(psi2)
 	)
 	fig
-end
-
-# ╔═╡ d8d82a31-d7cb-4465-84ca-54237fedc4aa
-md"""
-This doesn't seem to work as well as was suggested... but that's the idea!
-"""
-
-# ╔═╡ 0d3a35d4-2b6f-413b-a106-fbc6f51c9a92
-md"""
-### Example 2.5
-"""
-
-# ╔═╡ 991a2b97-aacc-4da3-b2b0-371a48f18b7b
-md"""
-Maybe by "blurring" the labels we can get something better?
-"""
-
-# ╔═╡ abbb075c-25df-4ce2-a331-3a65c82c5b77
-activation_fxn(x) = 2/(1+exp(-20x)) - 1
-
-# ╔═╡ 34edfe6b-fa81-4286-be31-f592fa6309cb
-function blur(G, labels; depth=0, maxdepth=100)
-	new_labels = copy(labels)
-	for v in vertices(G)
-		new_labels[v] = 
-			activation_fxn(sum(labels[w] for w in neighbors(G, v)) + labels[v])
-		if isapprox(new_labels[v], 0)
-			new_labels[v] = labels[v]
-		end
-	end
-	if labels == new_labels || depth ≥ maxdepth
-		return new_labels
-	else
-		return blur(G, new_labels; depth=depth+1)
-	end
 end
 
 # ╔═╡ 56b4219f-5d22-40a2-a273-ee096fcc4079
@@ -848,7 +778,6 @@ md"""
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
-Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 GraphMakie = "1ecd5474-83a3-4783-bb4f-06765db800d2"
@@ -860,7 +789,6 @@ ShortCodes = "f62ebe17-55c5-4640-972f-b59c0dd11ccf"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [compat]
-Arpack = "~0.5.4"
 CairoMakie = "~0.10.1"
 ForwardDiff = "~0.10.34"
 GraphMakie = "~0.5.1"
@@ -876,7 +804,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.8.5"
 manifest_format = "2.0"
-project_hash = "4f863cb6f82e4839434ba8517702336f28a38204"
+project_hash = "e2722d40ff543340a040860caa1a1db07ea8fb96"
 
 [[deps.AbstractFFTs]]
 deps = ["ChainRulesCore", "LinearAlgebra"]
@@ -916,18 +844,6 @@ deps = ["LinearAlgebra", "Random", "StaticArrays"]
 git-tree-sha1 = "62e51b39331de8911e4a7ff6f5aaf38a5f4cc0ae"
 uuid = "ec485272-7323-5ecc-a04f-4719b315124d"
 version = "0.2.0"
-
-[[deps.Arpack]]
-deps = ["Arpack_jll", "Libdl", "LinearAlgebra", "Logging"]
-git-tree-sha1 = "9b9b347613394885fd1c8c7729bfc60528faa436"
-uuid = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
-version = "0.5.4"
-
-[[deps.Arpack_jll]]
-deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "OpenBLAS_jll", "Pkg"]
-git-tree-sha1 = "5ba6c757e8feccf03a1554dfaf3e26b3cfc7fd5e"
-uuid = "68821587-b530-5797-8361-c406ea357684"
-version = "3.5.1+1"
 
 [[deps.Artifacts]]
 uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
@@ -2366,7 +2282,6 @@ version = "3.5.0+0"
 # ╠═f95cee56-df99-4a4f-8e80-515cc1c7df50
 # ╟─a847dd0a-ed33-4a3d-95a3-b2b7cc93af79
 # ╟─c2e6f122-7835-43da-a5e3-81b629809863
-# ╟─8d926e11-cbd5-4889-aca9-734eae47334b
 # ╠═72785005-3956-4737-93e8-cf24de1f5154
 # ╠═39cdbeb9-270f-4b53-9920-c1404d17a5b9
 # ╠═ef9ec87b-2b40-41e4-8045-9f7da7ad19b6
@@ -2381,17 +2296,8 @@ version = "3.5.0+0"
 # ╟─4d11e228-6082-4a19-bbd9-b50c97ec328b
 # ╟─1398722a-2ce7-437e-b67e-83779fec0639
 # ╠═ecc9d934-ddb0-4310-a52d-9f919f1c7455
-# ╠═e1920ab0-d5c6-4d1d-8efa-7318661c451e
-# ╠═88c68921-2178-42b2-a669-de7631c4c0c9
-# ╠═752825d8-17d9-4782-a02f-1f1087841950
-# ╠═030abf0a-6449-4868-b857-fdda35db3e84
 # ╟─e91440c2-f2c7-4067-aa9c-a369b18cb229
 # ╠═6141cb44-e94e-488f-9133-0f09e13a0a67
-# ╟─d8d82a31-d7cb-4465-84ca-54237fedc4aa
-# ╟─0d3a35d4-2b6f-413b-a106-fbc6f51c9a92
-# ╟─991a2b97-aacc-4da3-b2b0-371a48f18b7b
-# ╠═abbb075c-25df-4ce2-a331-3a65c82c5b77
-# ╠═34edfe6b-fa81-4286-be31-f592fa6309cb
 # ╠═56b4219f-5d22-40a2-a273-ee096fcc4079
 # ╟─fbf74a0e-3036-4330-9c44-e59297c6ebc0
 # ╟─ccc15f91-44f7-414a-bd16-5a068d9509a3
