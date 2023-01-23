@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.19
+# v0.19.20
 
 using Markdown
 using InteractiveUtils
@@ -531,11 +531,11 @@ Eigendecompose the graph Laplacian:
 begin
 	lambda, psi = eigen(Matrix(laplacian_matrix(H)))
 	psi2 = psi[:, sortperm(lambda)[2]]
-end
+end;
 
 # ╔═╡ e91440c2-f2c7-4067-aa9c-a369b18cb229
 md"""
-Strang says to color the nodes by the sign of ``\psi_{2i}``:
+Color the nodes by the sign of ``\psi_{2i}``:
 """
 
 # ╔═╡ 6141cb44-e94e-488f-9133-0f09e13a0a67
@@ -549,31 +549,9 @@ begin
 	fig
 end
 
-# ╔═╡ 56b4219f-5d22-40a2-a273-ee096fcc4079
-begin
-	local new_labels = blur(H, sign.(psi2))
-	graphplot(H; node_color=new_labels)
-end
-
-# ╔═╡ fbf74a0e-3036-4330-9c44-e59297c6ebc0
+# ╔═╡ 22919ac6-ce75-4b8a-bf6c-935d7f67364e
 md"""
-Nice.  This is technically a graph Laplacian message passing neural network!  😆
-"""
-
-# ╔═╡ ccc15f91-44f7-414a-bd16-5a068d9509a3
-md"""
-But... is the Laplacian even helping us?
-"""
-
-# ╔═╡ 2c57a095-7be1-40d9-b980-17ca389d63d9
-begin
-	local new_labels = sign.(sum(blur(H, rand([-1., 1.], nv(H))) for _ in 1:1e6))
-	graphplot(H; node_color=new_labels)
-end
-
-# ╔═╡ 92ac9c58-0b18-4097-b455-5e90a41a0e10
-md"""
-Yep!
+Nice!
 """
 
 # ╔═╡ 5510a572-7026-49ba-b924-9e9d70114354
@@ -636,13 +614,13 @@ where ``Q\in\mathbb{R}^{n\times k}`` is the matrix of embedding column vectors `
 
 In PCA, the objective is
 
-$$\min_{U,V}||\bar{X}-UV^T||^2_F:V^TV=I$$
+$$\min_{U,V}||\tilde{X}-UV^T||^2_F:V^TV=I$$
 
-where ``U\in\mathbb{R}^{p\times k}`` is the matrix of principal components, ``V\in\mathbb{R}^{n\times k}`` is the matrix of ``k``-dimensional data embeddings, and ``\bar{X}`` is the matrix ``X`` after row-centering (i.e. subtracting the mean of each row from every element in the row).
+where ``U\in\mathbb{R}^{p\times k}`` is the matrix of principal components, ``V\in\mathbb{R}^{n\times k}`` is the matrix of ``k``-dimensional data embeddings, and ``\tilde{X}`` is the matrix ``X`` after row-centering (i.e. subtracting the mean of each row from every element in the row).
 
 Combining the PCA and Laplacian embedding objectives by setting ``V=Q`` and taking a weighted sum gives the gLPCA objective:
 
-$$\min_{U,Q}J=||\bar{X}-UQ^T||^2_F+\alpha\text{Tr}(Q^TLQ):Q^TQ=I$$
+$$\min_{U,Q}J=||\tilde{X}-UQ^T||^2_F+\alpha\text{Tr}(Q^TLQ):Q^TQ=I$$
 """
 
 # ╔═╡ cfeb71f3-a9d4-4b50-80d9-911c41f698c7
@@ -650,33 +628,28 @@ md"""
 ## Solution
 """
 
-# ╔═╡ 97d4be32-e2ac-4644-baa6-d8ab0b9f075b
+# ╔═╡ ae415d67-6c73-414f-8870-8747b8fb2e84
 md"""
+### Finding ``U``
+
 The optimal ``U`` for a given ``Q`` is obtained by solving
 
-$$\frac{\partial{J}}{\partial{U}}=-2\bar{X}Q+2U=0$$
+$$\frac{\partial{J}}{\partial{U}}=-2\tilde{X}Q+2U=0$$
 
 which yields
 
-$$U=\bar{X}Q$$
+$$U=\tilde{X}Q$$
+"""
 
-The optimal ``Q`` is obtained by applying this result to the gLPCA objective function:
-
-$$\min_{Q}||\bar{X}-\bar{X}QQ^T||^2_F+\alpha\text{Tr}(Q^TLQ)=\min_Q\text{Tr}\left(Q^T(\alpha L-\bar{X}^T\bar{X})Q\right)$$
-
-Let 
-
-$$G_\alpha=\alpha L-\bar{X}^T\bar{X}$$  
-
-Then the objective is 
-
-$$\min_Q\text{Tr}(Q^TG_\alpha Q)$$
+# ╔═╡ 311e5317-f4ee-4b35-812b-8c458bc59187
+md"""
+### Normalizations
 
 Let's also impose some normalizations.
 
-Normalization term for ``\bar{X}^T\bar{X}``:
+Normalization term for ``\tilde{X}^T\tilde{X}``:
 
-$$\lambda_n=\max\lambda:\lambda \bar{X}^T\bar{X}=\Psi \bar{X}^T\bar{X}$$
+$$\lambda_n=\max\lambda:\lambda \tilde{X}^T\tilde{X}=\Psi \tilde{X}^T\tilde{X}$$
 
 Normalization term for ``L``:
 
@@ -685,21 +658,76 @@ $$\xi_n=\max\xi:\xi L=\Psi L$$
 Alternative trade-off factor:
 
 $$\alpha=\frac{\lambda_n\beta}{\xi_n(1-\beta)}$$
+"""
 
-This gives the objective
+# ╔═╡ d78444fd-b7a7-4fec-829c-58dc93752aff
+md"""
+### Finding ``Q``
 
-$$min_Q\text{Tr}\left(Q^T\left[(1-\beta)(I-\frac{\bar{X}^T\bar{X}}{\lambda_n})+\frac{\beta}{\xi_n}L\right]Q\right)$$
+The optimal ``Q`` is obtained by applying this result to the gLPCA objective function:
+
+$$\min_{Q}||\tilde{X}-\tilde{X}QQ^T||^2_F+\alpha\text{Tr}(Q^TLQ)=\min_Q\text{Tr}\left(Q^T(\alpha L-\tilde{X}^T\tilde{X})Q\right)$$
+
+Let 
+
+$$G_\alpha=\alpha L-\tilde{X}^T\tilde{X}$$  
+
+Then the objective is 
+
+$$\min_Q\text{Tr}(Q^TG_\alpha Q)$$
+
+Applying the normalizations from above, this becomes:
+
+$$\min_Q\text{Tr}\left(Q^T\left[(1-\beta)(I-\frac{\tilde{X}^T\tilde{X}}{\lambda_n})+\frac{\beta}{\xi_n}L\right]Q\right)$$
 
 Finally, let
 
-$$G_\beta=(1-\beta)(I-\frac{\bar{X}^T\bar{X}}{\lambda_n})+\frac{\beta}{\xi_n}L$$
+$$G_\beta=(1-\beta)(I-\frac{\tilde{X}^T\tilde{X}}{\lambda_n})+\frac{\beta}{\xi_n}L$$
 
-``\therefore`` The optimal ``Q`` is composed of the eigenvectors corresponding to the ``k`` smallest eigenvalues of ``G_\beta``.
+Which gives the objective function in its final form:
+
+$$\min_Q\text{Tr}(Q^TG_\beta Q)$$
+
+``\therefore`` The optimal ``Q`` is composed of the eigenvectors corresponding to the smallest eigenvalues of ``G_\beta``.
+"""
+
+# ╔═╡ bcb1d763-19b9-4306-9146-c845bf7ce2cb
+md"""
+## Projecting to ``\mathbb{R}^k``
+"""
+
+# ╔═╡ c9532ba1-694f-4e46-814d-2da52a602d3e
+md"""
+The matrix ``U`` contains the ``k`` graph-``W``-regularized principal components of ``\tilde{X}``.
+This is also referred to as the "data representation" in the paper.
+
+``U`` is a matrix of dimension ``p\times k``, and ``\tilde{X}`` is of dimension ``p\times n``.
+We want to get ``\hat{X}\in\mathbb{R}^{k\times n}``.
+
+$$\hat{X}=U^T\tilde{X}=Q^T\tilde{X}^T\tilde{X}$$
+"""
+
+# ╔═╡ 3d989556-89cf-48e8-ad7c-c05461d862b0
+md"""
+## Reconstruction in ``\mathbb{R}^p``
+
+The reconstruction of the data is:
+
+$$\tilde{X}\approx\tilde{X}QQ^T$$
+
+We can use this to make a loss function which can be tuned over ``\beta``:
+
+$$E=\frac{||\tilde{X}-\tilde{X}QQ^T||}{||\tilde{X}||}$$
 """
 
 # ╔═╡ 5cbe18b2-23ff-4ac7-ae89-1209eb2cb678
 md"""
 ## Example
+"""
+
+# ╔═╡ 4151ea1e-611d-4d92-8f9f-af13fc441d96
+md"""
+### Data
 """
 
 # ╔═╡ eeee05dc-cf41-4cc9-af85-030a2a2b9bb1
@@ -710,7 +738,7 @@ The ``X`` matrix will just be the vector of values from the function ``f`` appli
 """
 
 # ╔═╡ 5e4ba570-f890-4b88-8cc6-80f9c47d3be6
-X = fϕ
+X = fϕ'
 
 # ╔═╡ 4c8cdb41-915a-47f9-9aff-bcca06294fff
 md"""
@@ -718,7 +746,7 @@ Apply the centering procedure to ``X``
 """
 
 # ╔═╡ 7d59270f-af25-4e9d-816f-1ec9fe449f4a
-X̄ = X .- sum(X)/length(X)
+X̃ = X .- sum(X)/length(X)
 
 # ╔═╡ 87d8d815-9fb2-453a-b675-bf0d057c250b
 md"""
@@ -727,6 +755,11 @@ The graph ``W`` is the grid
 
 # ╔═╡ 785d4d8c-a8d1-4713-8b83-0d7f877fca64
 W = grid_5x5
+
+# ╔═╡ cf03334b-29a0-41c1-95b0-3b434cca27bd
+md"""
+### gLPCA
+"""
 
 # ╔═╡ ef6a86c1-4bb2-4ca1-9a0e-7123a44d53ce
 md"""
@@ -740,40 +773,63 @@ md"""
 
 # ╔═╡ d6ffa999-3317-4f46-9758-d39f0eb212f3
 Q = begin
-	XTX = X̄ * X̄'
-	λXTX, ψXTX = eigs(XTX)
-	λn = maximum(abs.(λXTX))
+	XTX = X̃' * X̃
+	λXTX, ψXTX = eigen(XTX)
+	λn = maximum(λXTX)
 	
-	wL = laplacian_matrix(W)
-	λL, ψL = eigs(wL)
-	ξn = maximum(abs.(λL))
+	wL = Matrix(laplacian_matrix(W))
+	λL, ψL = eigen(wL)
+	ξn = maximum(λL)
 	
 	Gβ = (1 - β) * (I - XTX / λn) + β * wL / ξn
-	λQ, ψQ = eigs(Gβ)
-	Q = ψQ[:, sortperm(abs.(λQ))[1:5]]
+	λQ, ψQ = eigen(Gβ)
+	Q = ψQ[:, sortperm(λQ)[2:3]]
 end;
 
-# ╔═╡ 6481feee-1152-4eac-9b65-d9efcf9f46ad
+# ╔═╡ dc1fedc4-16e6-4961-a04e-a7a989db0324
 md"""
-!!! ok "Data Representation Test"
+### Projection
 """
 
-# ╔═╡ bd66bdd1-b486-4270-971b-5760776feea9
-U = X̄' * Q
+# ╔═╡ 6596c5fc-cc4b-41df-a6b3-93bc461eda55
+X̂ = Q' * X̃' * X̃;
 
-# ╔═╡ d67dfa38-388a-4a73-ab07-7edc5d9fbb8f
-E = norm(X̄' - U * Q') / norm(X̄)
+# ╔═╡ 3d3cb8c1-9602-4d31-b30b-d1e5e70ac25e
+scatter(X̂)
+
+# ╔═╡ 02fc9724-83d9-4978-92df-c090dbc5d9f8
+md"""
+### Reconstruction
+"""
+
+# ╔═╡ c6683ba7-f1a5-4aa8-9421-409a4b7facb1
+md"""
+!!! danger "Hmm."
+	The reconstruction is WAY OFF!
+"""
+
+# ╔═╡ e22c804d-c5de-45fd-9c22-b0483c7a7b4d
+begin
+	local fig = Figure()
+	
+	hist!(
+		Axis(fig[1, 1]; title="Original"), 
+		X̃[:]; 
+		color=:orange, 
+		normalization=:probability
+	)
+	
+	hist!(
+		Axis(fig[1, 2]; title="Reconstruction"), 
+		X̂[:];
+		color=:black, 
+		normalization=:probability
+	)
+	fig
+end
 
 # ╔═╡ 085de9b1-00b4-4720-b281-e6f4259dd479
-@test E ≤ 0.25
-
-# ╔═╡ d76bcdf2-735f-47ba-8fa8-0eda52a56289
-md"""
-!!! danger "Hmm"
-	100 % error for all β...
-
-	Is it the choice of data, or is the code wrong?
-"""
+@test norm(X̃ - X̃ * Q * Q') / norm(X̃) ≤ 0.1
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -2297,12 +2353,8 @@ version = "3.5.0+0"
 # ╟─1398722a-2ce7-437e-b67e-83779fec0639
 # ╠═ecc9d934-ddb0-4310-a52d-9f919f1c7455
 # ╟─e91440c2-f2c7-4067-aa9c-a369b18cb229
-# ╠═6141cb44-e94e-488f-9133-0f09e13a0a67
-# ╠═56b4219f-5d22-40a2-a273-ee096fcc4079
-# ╟─fbf74a0e-3036-4330-9c44-e59297c6ebc0
-# ╟─ccc15f91-44f7-414a-bd16-5a068d9509a3
-# ╠═2c57a095-7be1-40d9-b980-17ca389d63d9
-# ╟─92ac9c58-0b18-4097-b455-5e90a41a0e10
+# ╟─6141cb44-e94e-488f-9133-0f09e13a0a67
+# ╟─22919ac6-ce75-4b8a-bf6c-935d7f67364e
 # ╟─5510a572-7026-49ba-b924-9e9d70114354
 # ╟─3b1ba68b-de0f-4cd1-9b51-17d1e7fa0ed4
 # ╟─0c906855-eb78-43e3-97b3-7915c1a33a1c
@@ -2310,21 +2362,30 @@ version = "3.5.0+0"
 # ╟─6d8c1e7a-e340-430e-abfb-c1937f537eeb
 # ╟─88b0485d-e3d7-4e4f-894d-e2bf883acb80
 # ╟─cfeb71f3-a9d4-4b50-80d9-911c41f698c7
-# ╟─97d4be32-e2ac-4644-baa6-d8ab0b9f075b
+# ╟─ae415d67-6c73-414f-8870-8747b8fb2e84
+# ╟─311e5317-f4ee-4b35-812b-8c458bc59187
+# ╟─d78444fd-b7a7-4fec-829c-58dc93752aff
+# ╟─bcb1d763-19b9-4306-9146-c845bf7ce2cb
+# ╟─c9532ba1-694f-4e46-814d-2da52a602d3e
+# ╟─3d989556-89cf-48e8-ad7c-c05461d862b0
 # ╟─5cbe18b2-23ff-4ac7-ae89-1209eb2cb678
+# ╟─4151ea1e-611d-4d92-8f9f-af13fc441d96
 # ╟─eeee05dc-cf41-4cc9-af85-030a2a2b9bb1
 # ╠═5e4ba570-f890-4b88-8cc6-80f9c47d3be6
 # ╟─4c8cdb41-915a-47f9-9aff-bcca06294fff
 # ╠═7d59270f-af25-4e9d-816f-1ec9fe449f4a
 # ╟─87d8d815-9fb2-453a-b675-bf0d057c250b
 # ╠═785d4d8c-a8d1-4713-8b83-0d7f877fca64
+# ╟─cf03334b-29a0-41c1-95b0-3b434cca27bd
 # ╟─ef6a86c1-4bb2-4ca1-9a0e-7123a44d53ce
 # ╟─fd1fe80e-37d2-4d15-841c-0cd76bc95c2a
 # ╠═d6ffa999-3317-4f46-9758-d39f0eb212f3
-# ╟─6481feee-1152-4eac-9b65-d9efcf9f46ad
-# ╠═bd66bdd1-b486-4270-971b-5760776feea9
-# ╠═d67dfa38-388a-4a73-ab07-7edc5d9fbb8f
+# ╟─dc1fedc4-16e6-4961-a04e-a7a989db0324
+# ╠═6596c5fc-cc4b-41df-a6b3-93bc461eda55
+# ╟─3d3cb8c1-9602-4d31-b30b-d1e5e70ac25e
+# ╟─02fc9724-83d9-4978-92df-c090dbc5d9f8
+# ╟─c6683ba7-f1a5-4aa8-9421-409a4b7facb1
+# ╟─e22c804d-c5de-45fd-9c22-b0483c7a7b4d
 # ╠═085de9b1-00b4-4720-b281-e6f4259dd479
-# ╟─d76bcdf2-735f-47ba-8fa8-0eda52a56289
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
