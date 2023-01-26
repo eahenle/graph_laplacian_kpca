@@ -502,13 +502,14 @@ H = begin
 	H = reduce(
 		blockdiag,
 		[
-			join(SimpleGraph(2), cycle_graph(6)), 
-			join(star_graph(5), path_graph(2)),
-			join(star_graph(5), path_graph(2))
+			join(SimpleGraph(2), cycle_graph(6)), # 1-8
+			join(star_graph(5), path_graph(2)), # 9 - 15
+			join(star_graph(5), path_graph(2)) # 16+
 		]
 	)
 	add_edge!(H, 8, 9)
 	add_edge!(H, 15, 16)
+	add_edge!(H, 1, 17)
 	H
 end
 
@@ -544,10 +545,14 @@ begin
 	graphplot!(
 		Axis(fig[1, 1]; graphplot_ax_kwargs...),
 		H; 
-		node_color=sign.(psi2)
+		node_color=sign.(psi2),
+		layout=GraphMakie.Spectral()
 	)
 	fig
 end
+
+# ╔═╡ 4666b59e-ddf2-40cb-8703-ecadccc14387
+hist(psi2; bins=100)
 
 # ╔═╡ 22919ac6-ce75-4b8a-bf6c-935d7f67364e
 md"""
@@ -2353,7 +2358,8 @@ version = "3.5.0+0"
 # ╟─1398722a-2ce7-437e-b67e-83779fec0639
 # ╠═ecc9d934-ddb0-4310-a52d-9f919f1c7455
 # ╟─e91440c2-f2c7-4067-aa9c-a369b18cb229
-# ╟─6141cb44-e94e-488f-9133-0f09e13a0a67
+# ╠═6141cb44-e94e-488f-9133-0f09e13a0a67
+# ╠═4666b59e-ddf2-40cb-8703-ecadccc14387
 # ╟─22919ac6-ce75-4b8a-bf6c-935d7f67364e
 # ╟─5510a572-7026-49ba-b924-9e9d70114354
 # ╟─3b1ba68b-de0f-4cd1-9b51-17d1e7fa0ed4
